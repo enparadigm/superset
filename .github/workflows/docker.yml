@@ -88,3 +88,4 @@ jobs:
             --context "$EVENT" \
             --context-ref "$RELEASE" $FORCE_LATEST \
             $PLATFORM_ARG
+            --tag adimyth/superset:${{ matrix.build_preset }}-${{ github.sha }}
