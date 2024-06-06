@@ -877,7 +877,7 @@ const SliceHeaderControls = (props: SliceHeaderControlsPropsWithRouter) => {
                 key={MenuKeys.ExportPivotCsv}
                 icon={<Icons.FileOutlined css={dropdownIconsStyles} />}
               >
-                {t('Export to pivoted .CSV')}
+                {t('Export to Pivoted .CSV')}
               </Menu.Item>
             )
           }
