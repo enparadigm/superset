@@ -38,54 +38,32 @@ jobs:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
     steps:
-
       - name: "Checkout ${{ github.ref }} ( ${{ github.sha }} )"
         uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Check for file changes
-        id: check
-        uses: ./.github/actions/change-detector/
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up QEMU
-        if: steps.check.outputs.python || steps.check.outputs.frontend || steps.check.outputs.docker
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        if: steps.check.outputs.python || steps.check.outputs.frontend || steps.check.outputs.docker
         uses: docker/setup-buildx-action@v3
 
-      - name: Try to login to DockerHub
-        if: steps.check.outputs.python || steps.check.outputs.frontend || steps.check.outputs.docker
-        continue-on-error: true
+      - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Setup supersetbot
-        if: steps.check.outputs.python || steps.check.outputs.frontend || steps.check.outputs.docker
         uses: ./.github/actions/setup-supersetbot/
 
-      - name: Build Docker Image
-        if: steps.check.outputs.python || steps.check.outputs.frontend || steps.check.outputs.docker
+      - name: Build and Push Docker image
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Single platform builds in pull_request context to speed things up
-          if [ "${{ github.event_name }}" = "push" ]; then
-            PLATFORM_ARG="--platform linux/arm64 --platform linux/amd64"
-          elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            PLATFORM_ARG="--platform linux/amd64"
-          fi
-
           supersetbot docker \
             --preset ${{ matrix.build_preset }} \
             --context "$EVENT" \
             --context-ref "$RELEASE" $FORCE_LATEST \
-            $PLATFORM_ARG
+            --platform linux/arm64 --platform linux/amd64 \
             --tag adimyth/superset:${{ matrix.build_preset }}-${{ github.sha }}
