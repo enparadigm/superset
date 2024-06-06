@@ -57,13 +57,14 @@ jobs:
         uses: ./.github/actions/setup-supersetbot/
 
       - name: Build and Push Docker image
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          supersetbot docker \
-            --preset ${{ matrix.build_preset }} \
-            --context "$EVENT" \
-            --context-ref "$RELEASE" $FORCE_LATEST \
-            --platform linux/arm64 --platform linux/amd64 \
-            --tag adimyth/superset:${{ matrix.build_preset }}-${{ github.sha }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          # TODO: Change the tag version later
+          tags: adimyth/superset:4.0.1
+          platforms: linux/amd64,linux/arm64/v8
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
