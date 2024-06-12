@@ -1,38 +1,15 @@
 name: Build & publish docker images
 
 on:
-  push:
-    branches:
-      - "master"
-      - "[0-9].[0-9]"
-  pull_request:
-    branches:
-      - "master"
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: true
+  release:
+    types:
+      - prereleased
+      - released
 
 jobs:
-  setup_matrix:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix_config: ${{ steps.set_matrix.outputs.matrix_config }}
-    steps:
-      - id: set_matrix
-        run: |
-          MATRIX_CONFIG=$(if [ "${{ github.event_name }}" == "pull_request" ]; then echo '["dev"]'; else echo '["dev", "lean", "py310", "websocket", "dockerize"]'; fi)
-          echo "matrix_config=${MATRIX_CONFIG}" >> $GITHUB_OUTPUT
-          echo $GITHUB_OUTPUT
-
   docker-build:
     name: docker-build
-    needs: setup_matrix
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        build_preset: ${{fromJson(needs.setup_matrix.outputs.matrix_config)}}
-      fail-fast: false
     env:
       DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -40,6 +17,11 @@ jobs:
     steps:
       - name: "Checkout ${{ github.ref }} ( ${{ github.sha }} )"
         uses: actions/checkout@v4
+
+      - name: Set tag name from release
+        id: set-tag-name
+        run: |
+          echo "TAG_NAME=${{ github.event.release.tag_name }}" >> $GITHUB_ENV
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -53,17 +35,13 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Setup supersetbot
-        uses: ./.github/actions/setup-supersetbot/
-
       - name: Build and Push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile
           push: true
-          # TODO: Change the tag version later
-          tags: adimyth/superset:4.0.1
+          tags: adimyth/superset:${{ env.TAG_NAME }}
           platforms: linux/amd64,linux/arm64/v8
           cache-from: type=gha
           cache-to: type=gha,mode=max
