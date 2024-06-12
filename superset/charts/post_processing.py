@@ -321,20 +321,30 @@ def apply_post_process(
         # Flatten hierarchical columns/index since they are represented as
         # `Tuple[str]`. Otherwise encoding to JSON later will fail because
         # maps cannot have tuples as their keys in JSON.
-        original_index_names = ",".join(processed_df.index.names)
+        original_index_names = None
+        if processed_df.index.names:
+            # Filter out None and convert each item to string
+            original_index_names = ",".join(str(name) for name in processed_df.index.names if name is not None)
         processed_df.columns = [
-            ",".join(str(name) for name in column).strip()
+            " ".join(str(name) for name in column).strip()
             if isinstance(column, tuple)
             else column
             for column in processed_df.columns
         ]
         processed_df.index = [
-            " ".join(str(name) for name in index).strip()
+            ",".join(str(name) for name in index).strip()
             if isinstance(index, tuple)
             else index
             for index in processed_df.index
         ]
-        processed_df.reset_index(names=original_index_names, inplace=True)
+        if original_index_names:
+            processed_df.reset_index(names=original_index_names, inplace=True)
+            # split the "," separeted columns into multiple columns and drop the original column
+            processed_df[original_index_names.split(",")] = processed_df[original_index_names].str.split(",", expand=True)
+            # drop the original column
+            processed_df.drop(columns=[original_index_names], inplace=True)
+            # move the columns to the front
+            processed_df = processed_df[original_index_names.split(",") + [col for col in processed_df.columns if col not in original_index_names.split(",")]]
 
         if query["result_format"] == ChartDataResultFormat.JSON:
             query["data"] = processed_df.to_dict()
