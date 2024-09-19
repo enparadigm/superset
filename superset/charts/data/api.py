@@ -396,9 +396,9 @@ class ChartDataRestApi(ChartRestApi):
             )
 
         if result_format == ChartDataResultFormat.JSON:
-            # Remove "query" key from result if it exists. Pushkar asked to remove it.
-            if "query" in result:
-                del result["query"]
+            # Remove "query" key from result items if it exists. Pushkar asked to remove it.
+            for query in result["queries"]:
+                query.pop("query", None)
 
             response_data = json.dumps(
                 {"result": result["queries"]},
