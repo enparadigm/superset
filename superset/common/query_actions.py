@@ -89,7 +89,8 @@ def _get_query(
     try:
         result["query"] = datasource.get_query_str(query_obj.to_dict())
     except QueryObjectValidationError as err:
-        result["error"] = err.message
+        # result["error"] = err.message
+        result["error"] = "Invalid Query"
     return result
 
 

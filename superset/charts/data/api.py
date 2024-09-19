@@ -152,7 +152,8 @@ class ChartDataRestApi(ChartRestApi):
         except DatasourceNotFound:
             return self.response_404()
         except QueryObjectValidationError as error:
-            return self.response_400(message=error.message)
+            # return self.response_400(message=error.message)
+            return self.response_400(message="Request is incorrect. Invalid Query")
         except ValidationError as error:
             return self.response_400(
                 message=_(
@@ -240,7 +241,8 @@ class ChartDataRestApi(ChartRestApi):
         except DatasourceNotFound:
             return self.response_404()
         except QueryObjectValidationError as error:
-            return self.response_400(message=error.message)
+            return self.response_400(message="Request is incorrect. Invalid Query")
+            # return self.response_400(message=error.message)
         except ValidationError as error:
             return self.response_400(
                 message=_(
@@ -394,6 +396,10 @@ class ChartDataRestApi(ChartRestApi):
             )
 
         if result_format == ChartDataResultFormat.JSON:
+            # Remove "query" key from result if it exists. Pushkar asked to remove it.
+            if "query" in result:
+                del result["query"]
+
             response_data = json.dumps(
                 {"result": result["queries"]},
                 default=json.json_int_dttm_ser,

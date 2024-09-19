@@ -166,7 +166,8 @@ class QueryContextProcessor:
                     region=CacheRegion.DATA,
                 )
             except QueryObjectValidationError as ex:
-                cache.error_message = str(ex)
+                # cache.error_message = str(ex)
+                cache.error_message = "Invalid Query"
                 cache.status = QueryStatus.FAILED
 
         # the N-dimensional DataFrame has converted into flat DataFrame

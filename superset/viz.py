@@ -588,7 +588,8 @@ class BaseViz:  # pylint: disable=too-many-public-methods
             except QueryObjectValidationError as ex:
                 error = dataclasses.asdict(
                     SupersetError(
-                        message=str(ex),
+                        # message=str(ex),
+                        message = "Invalid Query",
                         level=ErrorLevel.ERROR,
                         error_type=SupersetErrorType.VIZ_GET_DF_ERROR,
                     )
