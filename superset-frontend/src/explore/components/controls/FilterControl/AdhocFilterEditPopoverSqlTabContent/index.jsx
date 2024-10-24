@@ -23,6 +23,7 @@ import { styled, t } from '@superset-ui/core';
 import { SQLEditor } from 'src/components/AsyncAceEditor';
 import sqlKeywords from 'src/SqlLab/utils/sqlKeywords';
 
+import { getColumnKeywords } from 'src/explore/controlUtils/getColumnKeywords';
 import adhocMetricType from 'src/explore/components/controls/MetricControl/adhocMetricType';
 import columnType from 'src/explore/components/controls/FilterControl/columnType';
 import AdhocFilter from 'src/explore/components/controls/FilterControl/AdhocFilter';
@@ -39,7 +40,6 @@ const propTypes = {
     ]),
   ).isRequired,
   height: PropTypes.number.isRequired,
-  activeKey: PropTypes.string.isRequired,
 };
 
 const StyledSelect = styled(Select)`
@@ -56,10 +56,6 @@ export default class AdhocFilterEditPopoverSqlTabContent extends Component {
     this.onSqlExpressionClauseChange =
       this.onSqlExpressionClauseChange.bind(this);
     this.handleAceEditorRef = this.handleAceEditorRef.bind(this);
-
-    this.selectProps = {
-      ariaLabel: t('Select column'),
-    };
   }
 
   componentDidUpdate() {
@@ -95,27 +91,10 @@ export default class AdhocFilterEditPopoverSqlTabContent extends Component {
   render() {
     const { adhocFilter, height, options } = this.props;
 
-    const clauseSelectProps = {
-      placeholder: t('choose WHERE or HAVING...'),
-      value: adhocFilter.clause,
-      onChange: this.onSqlExpressionClauseChange,
-    };
     const keywords = sqlKeywords.concat(
-      options
-        .map(option => {
-          if (option.column_name) {
-            return {
-              name: option.column_name,
-              value: option.column_name,
-              score: 50,
-              meta: 'option',
-            };
-          }
-          return null;
-        })
-        .filter(Boolean),
+      getColumnKeywords(options.filter(option => option.column_name)),
     );
-    const selectOptions = Object.keys(Clauses).map(clause => ({
+    const selectOptions = Object.values(Clauses).map(clause => ({
       label: clause,
       value: clause,
     }));
@@ -123,11 +102,15 @@ export default class AdhocFilterEditPopoverSqlTabContent extends Component {
     return (
       <span>
         <div className="filter-edit-clause-section">
-          <StyledSelect
-            options={selectOptions}
-            {...this.selectProps}
-            {...clauseSelectProps}
-          />
+          <div>
+            <StyledSelect
+              options={selectOptions}
+              ariaLabel={t('Select column')}
+              placeholder={t('choose WHERE or HAVING...')}
+              value={adhocFilter.clause}
+              onChange={this.onSqlExpressionClauseChange}
+            />
+          </div>
           <span className="filter-edit-clause-info">
             <strong>WHERE</strong> {t('Filters by columns')}
             <br />

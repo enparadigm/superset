@@ -31,7 +31,19 @@ thumbnail_query_schema = {
     "type": "object",
     "properties": {"force": {"type": "boolean"}},
 }
-
+width_height_schema = {
+    "type": "array",
+    "items": {"type": "integer"},
+}
+screenshot_query_schema = {
+    "type": "object",
+    "properties": {
+        "force": {"type": "boolean"},
+        "permalink": {"type": "string"},
+        "window_size": width_height_schema,
+        "thumb_size": width_height_schema,
+    },
+}
 dashboard_title_description = "A title for the dashboard."
 slug_description = "Unique identifying part for the web address of the dashboard."
 owners_description = (
@@ -250,6 +262,7 @@ class DashboardDatasetSchema(Schema):
     owners = fields.List(fields.Dict())
     columns = fields.List(fields.Dict())
     column_types = fields.List(fields.Int())
+    column_names = fields.List(fields.Str())
     metrics = fields.List(fields.Dict())
     order_by_choices = fields.List(fields.List(fields.Str()))
     verbose_map = fields.Dict(fields.Str(), fields.Str())
@@ -265,6 +278,19 @@ class DashboardDatasetSchema(Schema):
             del serialized["owners"]
             del serialized["database"]
         return serialized
+
+
+class TabSchema(Schema):
+    # pylint: disable=W0108
+    children = fields.List(fields.Nested(lambda: TabSchema()))
+    value = fields.Str()
+    title = fields.Str()
+    parents = fields.List(fields.Str())
+
+
+class TabsPayloadSchema(Schema):
+    all_tabs = fields.Dict(keys=fields.String(), values=fields.String())
+    tab_tree = fields.List(fields.Nested(lambda: TabSchema))
 
 
 class BaseDashboardSchema(Schema):
@@ -373,6 +399,32 @@ class DashboardPutSchema(BaseDashboardSchema):
     )
 
 
+class DashboardNativeFiltersConfigUpdateSchema(BaseDashboardSchema):
+    deleted = fields.List(fields.String(), allow_none=False)
+    modified = fields.List(fields.Raw(), allow_none=False)
+    reordered = fields.List(fields.String(), allow_none=False)
+
+
+class DashboardScreenshotPostSchema(Schema):
+    dataMask = fields.Dict(
+        keys=fields.Str(),
+        values=fields.Raw(),
+        metadata={"description": "An object representing the data mask."},
+    )
+    activeTabs = fields.List(
+        fields.Str(), metadata={"description": "A list representing active tabs."}
+    )
+    anchor = fields.String(
+        metadata={"description": "A string representing the anchor."}
+    )
+    urlParams = fields.List(
+        fields.Tuple(
+            (fields.Str(), fields.Str()),
+        ),
+        metadata={"description": "A list of tuples, each containing two strings."},
+    )
+
+
 class ChartFavStarResponseResult(Schema):
     id = fields.Integer(metadata={"description": "The Chart id"})
     value = fields.Boolean(metadata={"description": "The FaveStar value"})
@@ -413,3 +465,22 @@ class EmbeddedDashboardResponseSchema(Schema):
     dashboard_id = fields.String()
     changed_on = fields.DateTime()
     changed_by = fields.Nested(UserSchema)
+
+
+class DashboardCacheScreenshotResponseSchema(Schema):
+    cache_key = fields.String(metadata={"description": "The cache key"})
+    dashboard_url = fields.String(
+        metadata={"description": "The url to render the dashboard"}
+    )
+    image_url = fields.String(
+        metadata={"description": "The url to fetch the screenshot"}
+    )
+
+
+class CacheScreenshotSchema(Schema):
+    dataMask = fields.Dict(keys=fields.Str(), values=fields.Raw(), required=False)
+    activeTabs = fields.List(fields.Str(), required=False)
+    anchor = fields.Str(required=False)
+    urlParams = fields.List(
+        fields.List(fields.Str(), validate=lambda x: len(x) == 2), required=False
+    )

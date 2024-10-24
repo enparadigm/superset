@@ -26,7 +26,6 @@ import {
   isFeatureEnabled,
   FeatureFlag,
   t,
-  getSharedLabelColor,
   getExtensionsRegistry,
 } from '@superset-ui/core';
 import { Global } from '@emotion/react';
@@ -36,12 +35,11 @@ import {
   LOG_ACTIONS_TOGGLE_EDIT_DASHBOARD,
 } from 'src/logger/LogUtils';
 import Icons from 'src/components/Icons';
-import Button from 'src/components/Button';
-import { AntdButton } from 'src/components/';
+import { Button } from 'src/components/';
 import { findPermission } from 'src/utils/findPermission';
 import { Tooltip } from 'src/components/Tooltip';
 import { safeStringify } from 'src/utils/safeStringify';
-import HeaderActionsDropdown from 'src/dashboard/components/Header/HeaderActionsDropdown';
+import ConnectedHeaderActionsDropdown from 'src/dashboard/components/Header/HeaderActionsDropdown';
 import PublishedStatus from 'src/dashboard/components/PublishedStatus';
 import UndoRedoKeyListeners from 'src/dashboard/components/UndoRedoKeyListeners';
 import PropertiesModal from 'src/dashboard/components/PropertiesModal';
@@ -139,7 +137,8 @@ const actionButtonsStyle = theme => css`
   }
 `;
 
-const StyledUndoRedoButton = styled(AntdButton)`
+const StyledUndoRedoButton = styled(Button)`
+  // TODO: check if we need this.
   padding: 0;
   &:hover {
     background: transparent;
@@ -374,13 +373,10 @@ class Header extends PureComponent {
       ? currentRefreshFrequency
       : dashboardInfo.metadata?.refresh_frequency;
 
-    const currentColorScheme =
-      dashboardInfo?.metadata?.color_scheme || colorScheme;
     const currentColorNamespace =
       dashboardInfo?.metadata?.color_namespace || colorNamespace;
-    const currentSharedLabelColors = Object.fromEntries(
-      getSharedLabelColor().getColorMap(),
-    );
+    const currentColorScheme =
+      dashboardInfo?.metadata?.color_scheme || colorScheme;
 
     const data = {
       certified_by: dashboardInfo.certified_by,
@@ -397,7 +393,6 @@ class Header extends PureComponent {
         color_scheme: currentColorScheme,
         positions,
         refresh_frequency: refreshFrequency,
-        shared_label_colors: currentSharedLabelColors,
       },
     };
 
@@ -580,7 +575,7 @@ class Header extends PureComponent {
                           title={t('Undo the action')}
                         >
                           <StyledUndoRedoButton
-                            type="text"
+                            buttonStyle="link"
                             disabled={undoLength < 1}
                             onClick={undoLength && onUndo}
                           >
@@ -600,7 +595,7 @@ class Header extends PureComponent {
                           title={t('Redo the action')}
                         >
                           <StyledUndoRedoButton
-                            type="text"
+                            buttonStyle="link"
                             disabled={redoLength < 1}
                             onClick={redoLength && onRedo}
                           >
@@ -672,7 +667,7 @@ class Header extends PureComponent {
             onVisibleChange: this.setIsDropdownVisible,
           }}
           additionalActionsMenu={
-            <HeaderActionsDropdown
+            <ConnectedHeaderActionsDropdown
               addSuccessToast={this.props.addSuccessToast}
               addDangerToast={this.props.addDangerToast}
               dashboardId={dashboardInfo.id}

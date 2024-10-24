@@ -64,6 +64,7 @@ const filterMock: Filter = {
 };
 
 const createProps: () => ControlItemsProps = () => ({
+  expanded: false,
   datasetId: 1,
   disabled: false,
   forceUpdate: jest.fn(),
@@ -71,6 +72,7 @@ const createProps: () => ControlItemsProps = () => ({
   filterId: 'filterId',
   filterToEdit: filterMock,
   filterType: 'filterType',
+  formChanged: jest.fn(),
 });
 
 const createControlItems = () => [
@@ -165,7 +167,7 @@ test('Clicking on checkbox', () => {
   expect(props.forceUpdate).toBeCalled();
 });
 
-test('Clicking on checkbox when resetConfig:flase', () => {
+test('Clicking on checkbox when resetConfig:false', () => {
   const props = createProps();
   (getControlItems as jest.Mock).mockReturnValue([
     { name: 'name_1', config: { renderTrigger: true, resetConfig: false } },

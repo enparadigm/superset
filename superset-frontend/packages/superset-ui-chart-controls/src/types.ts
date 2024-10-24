@@ -83,6 +83,7 @@ export interface Dataset {
   owners?: Owner[];
   filter_select?: boolean;
   filter_select_enabled?: boolean;
+  column_names?: string[];
 }
 
 export interface ControlPanelState {
@@ -258,6 +259,9 @@ export interface BaseControlConfig<
     props: ControlPanelsContainerProps,
     controlData: AnyDict,
   ) => boolean;
+  hidden?:
+    | boolean
+    | ((props: ControlPanelsContainerProps, controlData: AnyDict) => boolean);
 }
 
 export interface ControlValueValidator<

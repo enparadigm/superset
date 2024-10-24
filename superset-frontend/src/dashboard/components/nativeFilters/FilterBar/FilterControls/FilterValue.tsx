@@ -175,14 +175,13 @@ const FilterValue: FC<FilterControlProps> = ({
       setIsRefreshing(true);
       getChartDataRequest({
         formData: newFormData,
-        force: false,
+        force: shouldRefresh,
         ownState: filterOwnState,
       })
         .then(({ response, json }) => {
           if (isFeatureEnabled(FeatureFlag.GlobalAsyncQueries)) {
             // deal with getChartDataRequest transforming the response data
             const result = 'result' in json ? json.result[0] : json;
-
             if (response.status === 200) {
               setState([result]);
               handleFilterLoadFinish();

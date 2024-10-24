@@ -41,8 +41,8 @@ const propTypes = {
   initialValues: PropTypes.object,
   formData: PropTypes.object.isRequired,
   latestQueryFormData: PropTypes.object,
-  labelColors: PropTypes.object,
-  sharedLabelColors: PropTypes.object,
+  labelsColor: PropTypes.object,
+  labelsColorMap: PropTypes.object,
   height: PropTypes.number,
   width: PropTypes.number,
   setControlValue: PropTypes.func,
@@ -84,9 +84,13 @@ const defaultProps = {
 class ChartRenderer extends Component {
   constructor(props) {
     super(props);
+    const suppressContextMenu = getChartMetadataRegistry().get(
+      props.formData.viz_type ?? props.vizType,
+    )?.suppressContextMenu;
     this.state = {
       showContextMenu:
         props.source === ChartSource.Dashboard &&
+        !suppressContextMenu &&
         (isFeatureEnabled(FeatureFlag.DrillToDetail) ||
           isFeatureEnabled(FeatureFlag.DashboardCrossFilters)),
       inContextMenu: false,
@@ -153,8 +157,8 @@ class ChartRenderer extends Component {
         nextProps.height !== this.props.height ||
         nextProps.width !== this.props.width ||
         nextProps.triggerRender ||
-        nextProps.labelColors !== this.props.labelColors ||
-        nextProps.sharedLabelColors !== this.props.sharedLabelColors ||
+        nextProps.labelsColor !== this.props.labelsColor ||
+        nextProps.labelsColorMap !== this.props.labelsColorMap ||
         nextProps.formData.color_scheme !== this.props.formData.color_scheme ||
         nextProps.formData.stack !== this.props.formData.stack ||
         nextProps.cacheBusterProp !== this.props.cacheBusterProp ||

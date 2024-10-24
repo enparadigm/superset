@@ -54,8 +54,8 @@ const propTypes = {
   // from redux
   chart: chartPropShape.isRequired,
   formData: PropTypes.object.isRequired,
-  labelColors: PropTypes.object,
-  sharedLabelColors: PropTypes.object,
+  labelsColor: PropTypes.object,
+  labelsColorMap: PropTypes.object,
   datasource: PropTypes.object,
   slice: slicePropShape.isRequired,
   sliceName: PropTypes.string.isRequired,
@@ -207,7 +207,7 @@ class Chart extends Component {
       return true;
     }
 
-    // `cacheBusterProp` is jected by react-hot-loader
+    // `cacheBusterProp` is injected by react-hot-loader
     return this.props.cacheBusterProp !== nextProps.cacheBusterProp;
   }
 
@@ -387,8 +387,8 @@ class Chart extends Component {
       editMode,
       filters,
       formData,
-      labelColors,
-      sharedLabelColors,
+      labelsColor,
+      labelsColorMap,
       updateSliceName,
       sliceName,
       toggleExpandSlice,
@@ -515,8 +515,8 @@ class Chart extends Component {
             dashboardId={dashboardId}
             initialValues={initialValues}
             formData={formData}
-            labelColors={labelColors}
-            sharedLabelColors={sharedLabelColors}
+            labelsColor={labelsColor}
+            labelsColorMap={labelsColorMap}
             ownState={ownState}
             filterState={filterState}
             queriesResponse={chart.queriesResponse}

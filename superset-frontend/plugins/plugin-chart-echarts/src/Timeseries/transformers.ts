@@ -32,8 +32,7 @@ import {
   TimeseriesDataRecord,
   ValueFormatter,
 } from '@superset-ui/core';
-import { SeriesOption } from 'echarts';
-import {
+import type {
   CallbackDataParams,
   DefaultStatesMixin,
   ItemStyleOption,
@@ -43,11 +42,12 @@ import {
   SeriesLineLabelOption,
   ZRLineType,
 } from 'echarts/types/src/util/types';
-import {
+import type { SeriesOption } from 'echarts';
+import type {
   MarkArea1DDataItemOption,
   MarkArea2DDataItemOption,
 } from 'echarts/types/src/component/marker/MarkAreaModel';
-import { MarkLine1DDataItemOption } from 'echarts/types/src/component/marker/MarkLineModel';
+import type { MarkLine1DDataItemOption } from 'echarts/types/src/component/marker/MarkLineModel';
 import { extractForecastSeriesContext } from '../utils/forecast';
 import {
   EchartsTimeseriesSeriesType,
@@ -151,6 +151,7 @@ export function transformSeries(
     areaOpacity?: number;
     seriesType?: EchartsTimeseriesSeriesType;
     stack?: StackType;
+    stackIdSuffix?: string;
     yAxisIndex?: number;
     showValue?: boolean;
     onlyTotal?: boolean;
@@ -166,6 +167,7 @@ export function transformSeries(
     lineStyle?: LineStyleOption;
     queryIndex?: number;
     timeCompare?: string[];
+    timeShiftColor?: boolean;
   },
 ): SeriesOption | undefined {
   const { name } = series;
@@ -179,6 +181,7 @@ export function transformSeries(
     areaOpacity = 1,
     seriesType,
     stack,
+    stackIdSuffix,
     yAxisIndex = 0,
     showValue,
     onlyTotal,
@@ -188,10 +191,12 @@ export function transformSeries(
     showValueIndexes = [],
     thresholdValues = [],
     richTooltip,
+    seriesKey,
     sliceId,
     isHorizontal = false,
     queryIndex = 0,
     timeCompare = [],
+    timeShiftColor,
   } = opts;
   const contexts = seriesContexts[name || ''] || [];
   const hasForecast =
@@ -207,7 +212,7 @@ export function transformSeries(
     filterState?.selectedValues && !filterState?.selectedValues.includes(name);
   const opacity = isFiltered
     ? OpacityEnum.SemiTransparent
-    : OpacityEnum.NonTransparent;
+    : opts.lineStyle?.opacity || OpacityEnum.NonTransparent;
 
   // don't create a series if doing a stack or area chart and the result
   // is a confidence band
@@ -225,6 +230,9 @@ export function transformSeries(
   } else if (stack && isTrend) {
     stackId = getTimeCompareStackId(forecastSeries.type, timeCompare, name);
   }
+  if (stackId && stackIdSuffix) {
+    stackId += stackIdSuffix;
+  }
   let plotType;
   if (
     !isConfidenceBand &&
@@ -236,11 +244,22 @@ export function transformSeries(
   } else {
     plotType = seriesType === 'bar' ? 'bar' : 'line';
   }
-  // forcing the colorScale to return a different color for same metrics across different queries
-  const itemStyle = {
-    color: colorScale(colorScaleKey, sliceId),
+  /**
+   * if timeShiftColor is enabled the colorScaleKey forces the color to be the
+   * same as the original series, otherwise uses separate colors
+   * */
+  const itemStyle: ItemStyleOption = {
+    color: timeShiftColor
+      ? colorScale(colorScaleKey, sliceId)
+      : colorScale(seriesKey || forecastSeries.name, sliceId),
     opacity,
+    borderWidth: 0,
   };
+  if (seriesType === 'bar' && connectNulls) {
+    itemStyle.borderWidth = 1.5;
+    itemStyle.borderType = 'dotted';
+    itemStyle.borderColor = itemStyle.color;
+  }
   let emphasis = {};
   let showSymbol = false;
   if (!isConfidenceBand) {
@@ -566,10 +585,6 @@ export function getPadding(
     ? TIMESERIES_CONSTANTS.yAxisLabelTopOffset
     : 0;
   const xAxisOffset = addXAxisTitleOffset ? Number(xAxisTitleMargin) || 0 : 0;
-  const showLegendTopOffset =
-    isHorizontal && showLegend && legendOrientation === LegendOrientation.Top
-      ? 100
-      : 0;
 
   return getChartPadding(
     showLegend,
@@ -578,12 +593,8 @@ export function getPadding(
     {
       top:
         yAxisTitlePosition && yAxisTitlePosition === 'Top'
-          ? TIMESERIES_CONSTANTS.gridOffsetTop +
-            showLegendTopOffset +
-            (Number(yAxisTitleMargin) || 0)
-          : TIMESERIES_CONSTANTS.gridOffsetTop +
-            showLegendTopOffset +
-            yAxisOffset,
+          ? TIMESERIES_CONSTANTS.gridOffsetTop + (Number(yAxisTitleMargin) || 0)
+          : TIMESERIES_CONSTANTS.gridOffsetTop + yAxisOffset,
       bottom:
         zoomable && !isHorizontal
           ? TIMESERIES_CONSTANTS.gridOffsetBottomZoomable + xAxisOffset
