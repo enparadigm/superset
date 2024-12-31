@@ -160,7 +160,7 @@ class EmailNotification(BaseNotification):  # pylint: disable=too-few-public-met
               <body>
                 <div>{description}</div>
                 <br>
-                # <b><a href="{cta_url}">{call_to_action}</a></b><p></p>
+                <b><a href="{cta_url}">{call_to_action}</a></b><p></p>
                 {html_table}
                 {img_tag}
               </body>
