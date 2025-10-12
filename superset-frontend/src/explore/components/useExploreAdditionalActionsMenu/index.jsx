@@ -359,12 +359,13 @@ export const useExploreAdditionalActionsMenu = (
           >
             {t('Download as image')}
           </Menu.Item>
-          <Menu.Item
+          {/* Excel export disabled - comment out the following lines to re-enable */}
+          {/* <Menu.Item
             key={MENU_KEYS.EXPORT_TO_XLSX}
             icon={<Icons.FileOutlined css={iconReset} />}
           >
             {t('Export to Excel')}
-          </Menu.Item>
+          </Menu.Item> */}
         </Menu.SubMenu>
         <Menu.SubMenu title={t('Share')} key={MENU_KEYS.SHARE_SUBMENU}>
           <Menu.Item key={MENU_KEYS.COPY_PERMALINK}>
