@@ -1351,6 +1351,7 @@ EMAIL_REPORTS_SUBJECT_PREFIX = "[Report] "
 
 # The text for call-to-action link in Alerts & Reports emails
 EMAIL_REPORTS_CTA = "Explore in Superset"
+SHARPSELL_ADMIN_ANALYTICS_URL = ""
 
 # Slack API token for the superset reports, either string or callable
 SLACK_API_TOKEN: Callable[[], str] | str | None = None

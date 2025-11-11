@@ -131,6 +131,7 @@ class EmailNotification(BaseNotification):  # pylint: disable=too-few-public-met
             html_table = ""
 
         call_to_action = __(app.config["EMAIL_REPORTS_CTA"])
+        cta_url = __(app.config["SHARPSELL_ADMIN_ANALYTICS_URL"])
         img_tags = []
         for msgid in images.keys():
             img_tags.append(
@@ -140,6 +141,9 @@ class EmailNotification(BaseNotification):  # pylint: disable=too-few-public-met
                 """
             )
         img_tag = "".join(img_tags)
+        
+        cta_html = f'<b><a href="{cta_url}">{call_to_action}</a></b><p></p>' if call_to_action else ''
+        
         body = textwrap.dedent(
             f"""
             <html>
@@ -159,7 +163,7 @@ class EmailNotification(BaseNotification):  # pylint: disable=too-few-public-met
               <body>
                 <div>{description}</div>
                 <br>
-                <b><a href="{self._content.url}">{call_to_action}</a></b><p></p>
+                {cta_html}
                 {html_table}
                 {img_tag}
               </body>
