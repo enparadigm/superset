@@ -480,12 +480,13 @@ const SliceHeaderControls = (
               {t('Export to Pivoted .CSV')}
             </Menu.Item>
           )}
-          <Menu.Item
+          {/* Excel export disabled - comment out the following lines to re-enable */}
+          {/* <Menu.Item
             key={MenuKeys.ExportXlsx}
             icon={<Icons.FileOutlined css={dropdownIconsStyles} />}
           >
             {t('Export to Excel')}
-          </Menu.Item>
+          </Menu.Item> */}
 
           {isFeatureEnabled(FeatureFlag.AllowFullCsvExport) &&
             props.supersetCanCSV &&
@@ -497,12 +498,13 @@ const SliceHeaderControls = (
                 >
                   {t('Export to full .CSV')}
                 </Menu.Item>
-                <Menu.Item
+                {/* Excel export disabled - comment out the following lines to re-enable */}
+                {/* <Menu.Item
                   key={MenuKeys.ExportFullXlsx}
                   icon={<Icons.FileOutlined css={dropdownIconsStyles} />}
                 >
                   {t('Export to full Excel')}
-                </Menu.Item>
+                </Menu.Item> */}
               </>
             )}
 
