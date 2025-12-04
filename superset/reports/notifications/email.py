@@ -156,8 +156,9 @@ class EmailNotification(BaseNotification):  # pylint: disable=too-few-public-met
                 """
             )
         img_tag = "".join(img_tags)
-        cta_html = f'<b><a href="{cta_url}">{call_to_action}</a></b><p></p>' if call_to_action else ''
         call_to_action = self._get_call_to_action()
+        cta_html = f'<b><a href="{cta_url}">{call_to_action}</a></b><p></p>' if call_to_action else ''
+
         body = textwrap.dedent(
             f"""
             <html>
