@@ -156,14 +156,13 @@ test('Should render default props', () => {
   expect(screen.getByTestId(`slice_${SLICE_ID}-menu`)).toBeInTheDocument();
 });
 
-test('Should "export to CSV"', async () => {
+test('Should not show "Export to .CSV"', async () => {
   const props = createProps();
   renderWrapper(props);
-  expect(props.exportCSV).toHaveBeenCalledTimes(0);
   userEvent.hover(screen.getByText('Download'));
-  userEvent.click(await screen.findByText('Export to .CSV'));
-  expect(props.exportCSV).toHaveBeenCalledTimes(1);
-  expect(props.exportCSV).toHaveBeenCalledWith(371);
+  await screen.findByText('Download as image');
+  expect(screen.queryByText('Export to .CSV')).not.toBeInTheDocument();
+  expect(props.exportCSV).toHaveBeenCalledTimes(0);
 });
 
 test('Should "export to Excel"', async () => {
@@ -183,7 +182,7 @@ test('Export full CSV is under featureflag', async () => {
   const props = createProps(VizType.Table);
   renderWrapper(props);
   userEvent.hover(screen.getByText('Download'));
-  expect(await screen.findByText('Export to .CSV')).toBeInTheDocument();
+  await screen.findByText('Download as image');
   expect(screen.queryByText('Export to full .CSV')).not.toBeInTheDocument();
 });
 
@@ -206,7 +205,7 @@ test('Should not show export full CSV if report is not table', async () => {
   };
   renderWrapper();
   userEvent.hover(screen.getByText('Download'));
-  expect(await screen.findByText('Export to .CSV')).toBeInTheDocument();
+  await screen.findByText('Download as image');
   expect(screen.queryByText('Export to full .CSV')).not.toBeInTheDocument();
 });
 
