@@ -466,12 +466,13 @@ const SliceHeaderControls = (
 
       {props.supersetCanCSV && (
         <Menu.SubMenu title={t('Download')} key={MenuKeys.Download}>
-          <Menu.Item
+          {/* CSV export disabled - comment out the following lines to re-enable */}
+          {/* <Menu.Item
             key={MenuKeys.ExportCsv}
             icon={<Icons.FileOutlined css={dropdownIconsStyles} />}
           >
             {t('Export to .CSV')}
-          </Menu.Item>
+          </Menu.Item> */}
           {isPivotTable && (
             <Menu.Item
               key={MenuKeys.ExportPivotCsv}

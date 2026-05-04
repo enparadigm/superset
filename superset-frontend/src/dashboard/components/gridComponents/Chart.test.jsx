@@ -149,11 +149,8 @@ test.skip('should call changeFilter when ChartContainer calls changeFilter', () 
   expect(changeFilter.callCount).toBe(1);
 });
 
-test('should call exportChart when exportCSV is clicked', async () => {
-  const stubbedExportCSV = jest
-    .spyOn(exploreUtils, 'exportChart')
-    .mockImplementation(() => {});
-  const { findByText, getByRole } = setup(
+test('should not show "Export to .CSV" in the Download menu', async () => {
+  const { findByText, getByRole, queryByText } = setup(
     {},
     {
       dashboardInfo: { ...defaultState.dashboardInfo, superset_can_csv: true },
@@ -161,19 +158,8 @@ test('should call exportChart when exportCSV is clicked', async () => {
   );
   fireEvent.click(getByRole('button', { name: 'More Options' }));
   fireEvent.mouseOver(getByRole('menuitem', { name: 'Download right' }));
-  const exportAction = await findByText('Export to .CSV');
-  fireEvent.click(exportAction);
-  expect(stubbedExportCSV).toHaveBeenCalledTimes(1);
-  expect(stubbedExportCSV).toHaveBeenCalledWith(
-    expect.objectContaining({
-      formData: expect.objectContaining({
-        dashboardId: 111,
-      }),
-      resultType: 'full',
-      resultFormat: 'csv',
-    }),
-  );
-  stubbedExportCSV.mockRestore();
+  await findByText('Download as image');
+  expect(queryByText('Export to .CSV')).not.toBeInTheDocument();
 });
 
 test('should call exportChart with row_limit props.maxRows when exportFullCSV is clicked', async () => {
