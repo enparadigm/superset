@@ -138,6 +138,45 @@ class BaseTestChartDataApi(SupersetTestCase):
 @pytest.mark.chart_data_flow
 class TestPostChartDataApi(BaseTestChartDataApi):
     @pytest.mark.usefixtures("load_birth_names_dashboard_with_slices")
+    @with_feature_flags(ASYNC_CSV_EXPORT=True)
+    @mock.patch("superset.charts.data.api.export_chart_csv.apply_async")
+    def test_async_csv_export_is_enqueued(self, mock_apply_async):
+        previous_bucket = app.config.get("ASYNC_CSV_EXPORT_S3_BUCKET")
+        app.config["ASYNC_CSV_EXPORT_S3_BUCKET"] = "test-export-bucket"
+        try:
+            self.query_context_payload["form_data"] = {
+                "slice_name": "Birth Names",
+                "viz_type": "table",
+            }
+            rv = self.client.post(
+                f"{CHART_DATA_URI}/async_csv", json=self.query_context_payload
+            )
+        finally:
+            app.config["ASYNC_CSV_EXPORT_S3_BUCKET"] = previous_bucket
+
+        assert rv.status_code == 202
+        assert rv.json["job_id"]
+        assert "emailed" in rv.json["message"]
+        call_kwargs = mock_apply_async.call_args.kwargs
+        assert call_kwargs["task_id"] == rv.json["job_id"]
+        assert call_kwargs["kwargs"]["filename"] == "Birth_Names.csv"
+        assert call_kwargs["kwargs"]["query_context_payload"]["result_format"] == "csv"
+        assert call_kwargs["kwargs"]["query_context_payload"]["result_type"] == "full"
+
+    @with_feature_flags(ASYNC_CSV_EXPORT=True)
+    def test_async_csv_export_requires_bucket(self):
+        previous_bucket = app.config.get("ASYNC_CSV_EXPORT_S3_BUCKET")
+        app.config["ASYNC_CSV_EXPORT_S3_BUCKET"] = None
+        try:
+            rv = self.client.post(
+                f"{CHART_DATA_URI}/async_csv", json=self.query_context_payload
+            )
+        finally:
+            app.config["ASYNC_CSV_EXPORT_S3_BUCKET"] = previous_bucket
+
+        assert rv.status_code == 501
+
+    @pytest.mark.usefixtures("load_birth_names_dashboard_with_slices")
     def test__map_form_data_datasource_to_dataset_id(self):
         # arrange
         self.query_context_payload["datasource"] = {"id": 1, "type": "table"}
