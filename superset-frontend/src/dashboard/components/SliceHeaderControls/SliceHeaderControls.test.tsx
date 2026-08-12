@@ -161,7 +161,7 @@ test('Should "export to CSV"', async () => {
   renderWrapper(props);
   expect(props.exportCSV).toHaveBeenCalledTimes(0);
   userEvent.hover(screen.getByText('Download'));
-  userEvent.click(await screen.findByText('Export to .CSV'));
+  userEvent.click(await screen.findByText('Download chart CSV'));
   expect(props.exportCSV).toHaveBeenCalledTimes(1);
   expect(props.exportCSV).toHaveBeenCalledWith(371);
 });
@@ -183,8 +183,8 @@ test('Export full CSV is under featureflag', async () => {
   const props = createProps(VizType.Table);
   renderWrapper(props);
   userEvent.hover(screen.getByText('Download'));
-  expect(await screen.findByText('Export to .CSV')).toBeInTheDocument();
-  expect(screen.queryByText('Export to full .CSV')).not.toBeInTheDocument();
+  expect(await screen.findByText('Download chart CSV')).toBeInTheDocument();
+  expect(screen.queryByText('Download full CSV')).not.toBeInTheDocument();
 });
 
 test('Should "export full CSV"', async () => {
@@ -195,7 +195,7 @@ test('Should "export full CSV"', async () => {
   renderWrapper(props);
   expect(props.exportFullCSV).toHaveBeenCalledTimes(0);
   userEvent.hover(screen.getByText('Download'));
-  userEvent.click(await screen.findByText('Export to full .CSV'));
+  userEvent.click(await screen.findByText('Download full CSV'));
   expect(props.exportFullCSV).toHaveBeenCalledTimes(1);
   expect(props.exportFullCSV).toHaveBeenCalledWith(371);
 });
@@ -206,8 +206,8 @@ test('Should not show export full CSV if report is not table', async () => {
   };
   renderWrapper();
   userEvent.hover(screen.getByText('Download'));
-  expect(await screen.findByText('Export to .CSV')).toBeInTheDocument();
-  expect(screen.queryByText('Export to full .CSV')).not.toBeInTheDocument();
+  expect(await screen.findByText('Download chart CSV')).toBeInTheDocument();
+  expect(screen.queryByText('Download full CSV')).not.toBeInTheDocument();
 });
 
 test('Export full Excel is under featureflag', async () => {

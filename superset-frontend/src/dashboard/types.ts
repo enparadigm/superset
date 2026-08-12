@@ -258,6 +258,7 @@ export enum MenuKeys {
   DownloadAsImage = 'download_as_image',
   ExploreChart = 'explore_chart',
   ExportCsv = 'export_csv',
+  ExportCsvAsync = 'export_csv_async',
   ExportPivotCsv = 'export_pivot_csv',
   ExportFullCsv = 'export_full_csv',
   ExportXlsx = 'export_xlsx',

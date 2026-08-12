@@ -136,6 +136,7 @@ const SliceHeader = forwardRef<HTMLDivElement, SliceHeaderProps>(
       logExploreChart = () => ({}),
       logEvent,
       exportCSV = () => ({}),
+      exportCSVAsync = () => ({}),
       exportXLSX = () => ({}),
       editMode = false,
       annotationQuery = {},
@@ -277,6 +278,7 @@ const SliceHeader = forwardRef<HTMLDivElement, SliceHeaderProps>(
                   logExploreChart={logExploreChart}
                   logEvent={logEvent}
                   exportCSV={exportCSV}
+                  exportCSVAsync={exportCSVAsync}
                   exportPivotCSV={exportPivotCSV}
                   exportFullCSV={exportFullCSV}
                   exportXLSX={exportXLSX}

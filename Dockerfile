@@ -38,12 +38,14 @@ ENV DEV_MODE=${DEV_MODE}
 COPY docker/ /app/docker/
 # Arguments for build configuration
 ARG NPM_BUILD_CMD="build"
+ARG WEBPACK_MINIMIZE="true"
 
 # Install system dependencies required for node-gyp
 RUN /app/docker/apt-install.sh build-essential python3 zstd
 
 # Define environment variables for frontend build
 ENV BUILD_CMD=${NPM_BUILD_CMD} \
+    WEBPACK_MINIMIZE=${WEBPACK_MINIMIZE} \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 # Run the frontend memory monitoring script

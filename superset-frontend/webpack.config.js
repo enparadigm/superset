@@ -41,6 +41,7 @@ const APP_DIR = path.resolve(__dirname, './');
 // output dir
 const BUILD_DIR = path.resolve(__dirname, '../superset/static/assets');
 const ROOT_DIR = path.resolve(__dirname, '..');
+const shouldMinimize = process.env.WEBPACK_MINIMIZE !== 'false';
 
 const {
   mode = 'development',
@@ -242,6 +243,7 @@ const config = {
     },
   },
   optimization: {
+    minimize: shouldMinimize,
     sideEffects: true,
     splitChunks: {
       chunks: 'all',

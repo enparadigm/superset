@@ -18,12 +18,14 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import uuid
 from typing import Any, TYPE_CHECKING
 
 from flask import current_app, g, make_response, request, Response
 from flask_appbuilder.api import expose, protect
 from flask_babel import gettext as _
 from marshmallow import ValidationError
+from werkzeug.utils import secure_filename
 
 from superset import is_feature_enabled, security_manager
 from superset.async_events.async_query_manager import AsyncQueryTokenException
@@ -45,6 +47,7 @@ from superset.daos.exceptions import DatasourceNotFound
 from superset.exceptions import QueryObjectValidationError
 from superset.extensions import event_logger
 from superset.models.sql_lab import Query
+from superset.tasks.async_csv_export import export_chart_csv
 from superset.utils import json
 from superset.utils.core import (
     create_zip,
@@ -62,7 +65,83 @@ logger = logging.getLogger(__name__)
 
 
 class ChartDataRestApi(ChartRestApi):
-    include_route_methods = {"get_data", "data", "data_from_cache"}
+    include_route_methods = {"get_data", "data", "data_from_cache", "async_csv"}
+
+    @expose("/data/async_csv", methods=("POST",))
+    @protect()
+    @statsd_metrics
+    @event_logger.log_this_with_context(
+        action=lambda self, *args, **kwargs: f"{self.__class__.__name__}.async_csv",
+        log_to_statsd=False,
+    )
+    def async_csv(self) -> Response:  # noqa: C901
+        """Queue a chart CSV export and email a time-limited download link."""
+        if not is_feature_enabled("ASYNC_CSV_EXPORT"):
+            return self.response_404()
+        if not current_app.config.get("ASYNC_CSV_EXPORT_S3_BUCKET"):
+            return self.response(
+                501, message=_("Asynchronous CSV export is not configured.")
+            )
+        if not security_manager.can_access("can_csv", "Superset"):
+            return self.response_403()
+        if not getattr(g.user, "email", None):
+            return self.response_400(
+                message=_("Asynchronous CSV export requires an email address.")
+            )
+
+        json_body = request.get_json(silent=True)
+        if json_body is None and request.form.get("form_data"):
+            with contextlib.suppress(TypeError, json.JSONDecodeError):
+                json_body = json.loads(request.form["form_data"])
+        if json_body is None:
+            return self.response_400(message=_("Request is not JSON"))
+
+        # The endpoint has one purpose. Do not allow a caller to turn the
+        # background task into another result type or format.
+        json_body["result_format"] = ChartDataResultFormat.CSV
+        json_body["result_type"] = ChartDataResultType.FULL
+
+        try:
+            query_context = self._create_query_context_from_form(json_body)
+            command = ChartDataCommand(query_context)
+            command.validate()
+        except DatasourceNotFound:
+            return self.response_404()
+        except QueryObjectValidationError:
+            return self.response_400(message="Request is incorrect. Invalid Query")
+        except ValidationError as error:
+            return self.response_400(
+                message=_(
+                    "Request is incorrect: %(error)s", error=error.normalized_messages()
+                )
+            )
+
+        if not query_context.queries:
+            return self.response_400(message=_("Query context has no queries."))
+
+        form_data = json_body.get("form_data") or {}
+        chart_name = form_data.get("slice_name") or form_data.get("viz_type") or "chart"
+        filename = secure_filename(f"{chart_name}.csv") or "chart.csv"
+        job_id = str(uuid.uuid4())
+        export_chart_csv.apply_async(
+            kwargs={
+                "query_context_payload": json_body,
+                "user_id": g.user.id,
+                "user_email": g.user.email,
+                "filename": filename,
+                "job_id": job_id,
+            },
+            task_id=job_id,
+            soft_time_limit=current_app.config[
+                "ASYNC_CSV_EXPORT_SOFT_TIME_LIMIT_SECONDS"
+            ],
+            time_limit=current_app.config["ASYNC_CSV_EXPORT_HARD_TIME_LIMIT_SECONDS"],
+        )
+        return self.response(
+            202,
+            job_id=job_id,
+            message=_("CSV export started. A download link will be emailed to you."),
+        )
 
     @expose("/<int:pk>/data/", methods=("GET",))
     @protect()
@@ -267,8 +346,9 @@ class ChartDataRestApi(ChartRestApi):
     @protect()
     @statsd_metrics
     @event_logger.log_this_with_context(
-        action=lambda self, *args, **kwargs: f"{self.__class__.__name__}"
-        f".data_from_cache",
+        action=lambda self, *args, **kwargs: (
+            f"{self.__class__.__name__}.data_from_cache"
+        ),
         log_to_statsd=False,
     )
     def data_from_cache(self, cache_key: str) -> Response:

@@ -271,6 +271,24 @@ export const exportChart = ({
   SupersetClient.postForm(url, { form_data: safeStringify(payload) });
 };
 
+export const exportChartAsyncCSV = ({
+  formData,
+  force = false,
+  ownState = {},
+}) => {
+  const payload = buildV1ChartDataPayload({
+    formData,
+    force,
+    resultFormat: 'csv',
+    resultType: 'full',
+    ownState,
+  });
+  return SupersetClient.post({
+    endpoint: '/api/v1/chart/data/async_csv',
+    jsonPayload: payload,
+  });
+};
+
 export const exploreChart = (formData, requestParams) => {
   const url = getExploreUrl({
     formData,
