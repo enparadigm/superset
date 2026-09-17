@@ -44,7 +44,10 @@ from superset.utils.hashing import md5_sha_from_str
 from superset.utils.network import is_hostname_valid, is_port_open
 
 if TYPE_CHECKING:
+    import pandas as pd
+
     from superset.models.core import Database
+    from superset.sql_parse import Table
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +264,11 @@ class ClickHouseConnectEngineSpec(BasicParametersMixin, ClickHouseEngineSpec):
     default_driver = "connect"
     _function_names: list[str] = []
 
+    # The clickhouse-connect driver can insert data, so the file upload flow that
+    # the parent ClickHouseEngineSpec disables is re-enabled here. It needs the
+    # df_to_sql override below to work — see the docstring there.
+    supports_file_upload = True
+
     sqlalchemy_uri_placeholder = (
         "clickhousedb://user:password@host[:port][/dbname][?secure=value&=value...]"
     )
@@ -302,6 +310,161 @@ class ClickHouseConnectEngineSpec(BasicParametersMixin, ClickHouseEngineSpec):
     def get_datatype(cls, type_code: str) -> str:
         # keep it lowercase, as ClickHouse types aren't typical SHOUTCASE ANSI SQL
         return type_code
+
+    @classmethod
+    def _upload_column_type(cls, series: pd.Series, nullable: bool) -> Any:
+        """
+        Map a pandas dtype to a native ClickHouse column type.
+
+        The types must come from ``cc_sqlalchemy`` rather than ``sqlalchemy.types``:
+        the ClickHouse DDL compiler only wraps a column in ``Nullable()`` when its
+        type is a ``ChSqlaType``, so generic SQLAlchemy types silently produce a
+        non-nullable column and the insert then fails on the first empty cell.
+        """
+        # pylint: disable=import-outside-toplevel, import-error
+        import pandas as pd
+        from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import (
+            Bool,
+            DateTime64,
+            Float64,
+            Int64,
+            Nullable,
+            String,
+        )
+
+        dtype = series.dtype
+        if pd.api.types.is_bool_dtype(dtype):
+            base = Bool()
+        elif pd.api.types.is_integer_dtype(dtype):
+            base = Int64()
+        elif pd.api.types.is_float_dtype(dtype):
+            # Float64, not Float32: CSV floats are parsed as float64 and mapping
+            # them to Float32 loses precision silently.
+            base = Float64()
+        elif pd.api.types.is_datetime64_any_dtype(dtype):
+            base = DateTime64(3)
+        elif pd.api.types.infer_dtype(series, skipna=True) in {
+            "datetime",
+            "datetime64",
+            "date",
+        }:
+            # Object columns may still hold temporal values, e.g. parsed dates.
+            base = DateTime64(3)
+        else:
+            base = String()
+        # DateTime64 rather than DateTime throughout: DateTime only spans
+        # 1970-2106, so a date outside it would fail or wrap.
+        return Nullable(base) if nullable else base
+
+    @classmethod
+    def df_to_sql(
+        cls,
+        database: Database,
+        table: Table,
+        df: pd.DataFrame,
+        to_sql_kwargs: dict[str, Any],
+    ) -> None:
+        """
+        Upload a DataFrame to ClickHouse.
+
+        ClickHouse requires every table to declare a table engine, which the
+        ``CREATE TABLE`` emitted by pandas' ``to_sql`` does not — it fails with
+        "requires an engine" before a single row is written. So the table is
+        created here with a MergeTree engine and the rows are then appended.
+
+        The engine can be tuned per database through its ``extra`` JSON::
+
+            {"clickhouse_file_upload": {
+                "order_by": ["col1", "col2"],
+                "partition_by": "toYYYYMM(col1)",
+                "primary_key": "col1",
+                "settings": {"index_granularity": 8192}
+            }}
+
+        ``order_by`` defaults to ``tuple()`` (no sort key) so an upload works with
+        no configuration. Columns named in ``order_by`` are created non-nullable,
+        because a sort key cannot be nullable — an empty cell in one of those
+        columns will fail the upload.
+        """
+        # pylint: disable=import-outside-toplevel, import-error
+        import pandas as pd
+        from clickhouse_connect.cc_sqlalchemy.ddl.tableengine import MergeTree
+        from sqlalchemy import Column, inspect, MetaData, Table as SqlaTable, text
+
+        if_exists = to_sql_kwargs.get("if_exists", "fail")
+
+        if to_sql_kwargs.get("index"):
+            # Fold the index into the columns so the table we create matches what
+            # gets inserted; the append below always passes index=False. Preserve
+            # the uploader's requested index_label as the new column name(s).
+            df = df.reset_index(names=to_sql_kwargs.get("index_label"))
+
+        config = (database.get_extra() or {}).get("clickhouse_file_upload", {})
+        order_by = config.get("order_by")
+        if order_by:
+            key_columns = set(
+                order_by if isinstance(order_by, (list, tuple)) else [order_by]
+            )
+            engine_kwargs: dict[str, Any] = {"order_by": order_by}
+        else:
+            # MergeTree still requires an ORDER BY; an empty tuple means "none".
+            key_columns = set()
+            engine_kwargs = {"order_by": text("tuple()")}
+        for key in ("partition_by", "primary_key", "settings"):
+            if config.get(key):
+                engine_kwargs[key] = config[key]
+
+        with cls.get_engine(
+            database, catalog=table.catalog, schema=table.schema
+        ) as engine:
+            has_table = inspect(engine).has_table(table.table, schema=table.schema)
+            if has_table and if_exists == "fail":
+                # Raise ValueError so the uploader surfaces its friendly
+                # "table already exists" message (see UploadCommand).
+                raise ValueError(f"Table {table.table} already exists.")
+            if has_table and if_exists == "replace":
+                SqlaTable(table.table, MetaData(), schema=table.schema).drop(
+                    engine, checkfirst=True
+                )
+                has_table = False
+
+            if not has_table:
+                columns = [
+                    Column(
+                        str(name),
+                        cls._upload_column_type(
+                            df[name], nullable=str(name) not in key_columns
+                        ),
+                    )
+                    for name in df.columns
+                ]
+                SqlaTable(
+                    table.table,
+                    MetaData(),
+                    *columns,
+                    schema=table.schema,
+                    clickhousedb_engine=MergeTree(**engine_kwargs),
+                ).create(engine)
+
+            # clickhouse-connect writes NaN/NaT as-is and the server rejects them;
+            # converting to None first is what produces real NULLs.
+            df = df.astype(object).where(pd.notnull(df), None)
+
+            insert_kwargs = {
+                **to_sql_kwargs,
+                "name": table.table,
+                "if_exists": "append",
+                "index": False,
+            }
+            insert_kwargs.pop("index_label", None)
+            if table.schema:
+                insert_kwargs["schema"] = table.schema
+            if (
+                engine.dialect.supports_multivalues_insert
+                or cls.supports_multivalues_insert
+            ):
+                insert_kwargs["method"] = "multi"
+            df.to_sql(con=engine, **insert_kwargs)
 
     @classmethod
     def build_sqlalchemy_uri(
