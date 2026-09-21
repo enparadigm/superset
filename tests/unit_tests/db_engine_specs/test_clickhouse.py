@@ -295,8 +295,10 @@ def test_connect_upload_column_type(
 def upload_mocks(mocker: MockerFixture) -> Any:
     """
     Wire up ``ClickHouseConnectEngineSpec.df_to_sql`` for unit testing without a
-    live ClickHouse: ``get_engine``/``inspect`` are stubbed and the SQLAlchemy
-    ``Table`` and ``DataFrame.to_sql`` calls are captured instead of executed.
+    live ClickHouse: ``get_engine``/``inspect`` are stubbed, the SQLAlchemy
+    ``Table`` call is captured, and rows are "inserted" via a mocked
+    clickhouse-connect client reached through ``engine.raw_connection()``
+    rather than a real ``insert_df``.
     """
     pytest.importorskip("clickhouse_connect")
     from superset.db_engine_specs.clickhouse import ClickHouseConnectEngineSpec
@@ -313,14 +315,15 @@ def upload_mocks(mocker: MockerFixture) -> Any:
     inspector.has_table.return_value = False
     mocker.patch("sqlalchemy.inspect", return_value=inspector)
 
+    client = mocker.MagicMock()
+    engine.raw_connection.return_value.connection.client = client
+
     return SimpleNamespace(
         spec=ClickHouseConnectEngineSpec,
         engine=engine,
         inspector=inspector,
         table_factory=mocker.patch("sqlalchemy.Table"),
-        # autospec so the receiving DataFrame is recorded as the first arg,
-        # which is how the NaN -> None conversion gets asserted.
-        to_sql=mocker.patch.object(pd.DataFrame, "to_sql", autospec=True),
+        insert_df=client.insert_df,
     )
 
 
@@ -354,11 +357,10 @@ def test_connect_df_to_sql_default_engine(
         "Nullable(String)",
     ]
 
-    # Rows are appended, not re-created, and the index is dropped.
-    kwargs = upload_mocks.to_sql.call_args.kwargs
-    assert kwargs["name"] == "t"
-    assert kwargs["if_exists"] == "append"
-    assert kwargs["index"] is False
+    # Rows are appended via the native client, not re-created.
+    args = upload_mocks.insert_df.call_args.args
+    assert args[0] == "t"
+    assert args[1]["id"].tolist() == [1, 2]
 
 
 def test_connect_df_to_sql_configurable_engine(
@@ -390,11 +392,37 @@ def test_connect_df_to_sql_configurable_engine(
     assert [c.type.compile() for c in columns] == ["Int64", "Nullable(String)"]
 
 
-def test_connect_df_to_sql_nulls_become_none(
+def test_connect_df_to_sql_stringifies_mixed_type_string_columns(
+    upload_mocks: Any,
+) -> None:
+    """
+    A column with no single numpy dtype (e.g. IDs that are sometimes numeric,
+    sometimes text) falls through ``_upload_column_type`` to String, but
+    pandas leaves its cells as whatever raw Python objects it parsed.
+    ``insert_df``'s String serializer fails on the first non-string cell with
+    an opaque ``'int' object has no attribute 'encode'``, so those cells must
+    be stringified (nulls excepted) before it sees them.
+    """
+    database = Mock()
+    database.get_extra.return_value = {}
+    df = pd.DataFrame({"emp_id": [123, "E456", None, 789]})
+
+    upload_mocks.spec.df_to_sql(
+        database, Table("t"), df, {"if_exists": "fail", "index": False}
+    )
+
+    inserted = upload_mocks.insert_df.call_args.args[1]
+    assert inserted["emp_id"].tolist() == ["123", "E456", None, "789"]
+
+
+def test_connect_df_to_sql_passes_df_unmodified(
     upload_mocks: Any, upload_df: pd.DataFrame
 ) -> None:
     """
-    NaN/NaT must reach the driver as None, or ClickHouse rejects the insert.
+    NaN/NaT scrubbing is delegated to clickhouse-connect's ``insert_df``, which
+    handles it per column using the DataFrame's native numpy dtypes. The
+    DataFrame must reach it as-is: coercing it to ``dtype=object`` first (as a
+    manual None-conversion would) defeats those dtype checks.
     """
     database = Mock()
     database.get_extra.return_value = {}
@@ -403,8 +431,9 @@ def test_connect_df_to_sql_nulls_become_none(
         database, Table("t"), upload_df, {"if_exists": "fail", "index": False}
     )
 
-    inserted = upload_mocks.to_sql.call_args.args[0]
+    inserted = upload_mocks.insert_df.call_args.args[1]
     assert inserted["name"].tolist() == ["alpha", None]
+    assert inserted["id"].dtype == upload_df["id"].dtype
 
 
 def test_connect_df_to_sql_if_exists_fail(
@@ -423,7 +452,7 @@ def test_connect_df_to_sql_if_exists_fail(
             database, Table("t"), upload_df, {"if_exists": "fail", "index": False}
         )
 
-    upload_mocks.to_sql.assert_not_called()
+    upload_mocks.insert_df.assert_not_called()
 
 
 def test_connect_df_to_sql_if_exists_replace(
@@ -440,7 +469,7 @@ def test_connect_df_to_sql_if_exists_replace(
 
     upload_mocks.table_factory.return_value.drop.assert_called_once()
     upload_mocks.table_factory.return_value.create.assert_called_once()
-    assert upload_mocks.to_sql.call_args.kwargs["if_exists"] == "append"
+    upload_mocks.insert_df.assert_called_once()
 
 
 def test_connect_df_to_sql_if_exists_append(
@@ -456,7 +485,7 @@ def test_connect_df_to_sql_if_exists_append(
     )
 
     upload_mocks.table_factory.return_value.create.assert_not_called()
-    assert upload_mocks.to_sql.call_args.kwargs["if_exists"] == "append"
+    upload_mocks.insert_df.assert_called_once()
 
 
 def test_connect_df_to_sql_index_folded_into_columns(
@@ -479,6 +508,31 @@ def test_connect_df_to_sql_index_folded_into_columns(
     columns = upload_mocks.table_factory.call_args.args[2:]
     assert [c.name for c in columns] == ["row_no", "id", "name"]
 
-    kwargs = upload_mocks.to_sql.call_args.kwargs
-    assert kwargs["index"] is False
-    assert "index_label" not in kwargs
+    inserted = upload_mocks.insert_df.call_args.args[1]
+    assert list(inserted.columns) == ["row_no", "id", "name"]
+
+
+def test_connect_df_to_sql_batches_large_uploads(
+    upload_mocks: Any, mocker: MockerFixture
+) -> None:
+    """
+    Rows are written in ``UPLOAD_INSERT_BATCH_SIZE``-sized native inserts
+    rather than the generic uploader's small ``chunksize`` — each
+    ``insert_df`` call becomes its own MergeTree part, so batching this way
+    (instead of one call per 1000-row chunk) is what avoids creating
+    thousands of parts on a large upload.
+    """
+    from superset.db_engine_specs import clickhouse as clickhouse_module
+
+    mocker.patch.object(clickhouse_module, "UPLOAD_INSERT_BATCH_SIZE", 2)
+    database = Mock()
+    database.get_extra.return_value = {}
+    df = pd.DataFrame({"id": range(5), "name": list("abcde")})
+
+    upload_mocks.spec.df_to_sql(
+        database, Table("t"), df, {"if_exists": "fail", "index": False}
+    )
+
+    assert upload_mocks.insert_df.call_count == 3
+    sizes = [len(call.args[1]) for call in upload_mocks.insert_df.call_args_list]
+    assert sizes == [2, 2, 1]
