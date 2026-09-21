@@ -255,6 +255,14 @@ except ImportError:  # ClickHouse Connect not installed, do nothing
     pass
 
 
+# pandas.to_sql's generic default (1000) is tuned for row-oriented DBAPI
+# drivers. clickhouse-connect's native insert_df batches an entire chunk into
+# one columnar block per call, so far fewer, larger chunks make better use of
+# it; this is a floor, not a ceiling — a caller-supplied chunksize above it
+# still wins.
+UPLOAD_INSERT_BATCH_SIZE = 100_000
+
+
 class ClickHouseConnectEngineSpec(BasicParametersMixin, ClickHouseEngineSpec):
     """Engine spec for clickhouse-connect connector"""
 
@@ -385,9 +393,20 @@ class ClickHouseConnectEngineSpec(BasicParametersMixin, ClickHouseEngineSpec):
         no configuration. Columns named in ``order_by`` are created non-nullable,
         because a sort key cannot be nullable — an empty cell in one of those
         columns will fail the upload.
+
+        Rows are written with clickhouse-connect's native ``insert_df``, not
+        pandas' ``df.to_sql``. ``to_sql`` goes through SQLAlchemy's row-oriented
+        executemany, which — even chunked — issues one native insert per chunk
+        of the generic uploader's ``chunksize`` (1000). Each chunk becomes its
+        own MergeTree part, so a multi-million-row upload was creating
+        thousands of parts and taking minutes; ``insert_df`` writes columnar
+        blocks straight from the DataFrame, and ``UPLOAD_INSERT_BATCH_SIZE``
+        raises the effective batch size so far fewer parts are created.
         """
         # pylint: disable=import-outside-toplevel, import-error
-        import pandas as pd
+        from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import (
+            String as ChString,
+        )
         from clickhouse_connect.cc_sqlalchemy.ddl.tableengine import MergeTree
         from sqlalchemy import Column, inspect, MetaData, Table as SqlaTable, text
 
@@ -428,15 +447,19 @@ class ClickHouseConnectEngineSpec(BasicParametersMixin, ClickHouseEngineSpec):
                 )
                 has_table = False
 
+            column_types = [
+                (
+                    name,
+                    cls._upload_column_type(
+                        df[name], nullable=str(name) not in key_columns
+                    ),
+                )
+                for name in df.columns
+            ]
+
             if not has_table:
                 columns = [
-                    Column(
-                        str(name),
-                        cls._upload_column_type(
-                            df[name], nullable=str(name) not in key_columns
-                        ),
-                    )
-                    for name in df.columns
+                    Column(str(name), col_type) for name, col_type in column_types
                 ]
                 SqlaTable(
                     table.table,
@@ -446,25 +469,34 @@ class ClickHouseConnectEngineSpec(BasicParametersMixin, ClickHouseEngineSpec):
                     clickhousedb_engine=MergeTree(**engine_kwargs),
                 ).create(engine)
 
-            # clickhouse-connect writes NaN/NaT as-is and the server rejects them;
-            # converting to None first is what produces real NULLs.
-            df = df.astype(object).where(pd.notnull(df), None)
+            # insert_df serializes a String column by calling .encode() on every
+            # value. A column with no consistent numpy dtype (e.g. mostly blank
+            # cells, or a mix of numbers and text) still falls through
+            # _upload_column_type to String, but its cells stay whatever
+            # Python objects pandas parsed them as — the encoder then dies on
+            # the first bare int/float with an opaque
+            # "'int' object has no attribute 'encode'" instead of a real error.
+            for name, col_type in column_types:
+                if isinstance(col_type, ChString):
+                    df[name] = df[name].where(df[name].isna(), df[name].astype(str))
 
-            insert_kwargs = {
-                **to_sql_kwargs,
-                "name": table.table,
-                "if_exists": "append",
-                "index": False,
-            }
-            insert_kwargs.pop("index_label", None)
-            if table.schema:
-                insert_kwargs["schema"] = table.schema
-            if (
-                engine.dialect.supports_multivalues_insert
-                or cls.supports_multivalues_insert
-            ):
-                insert_kwargs["method"] = "multi"
-            df.to_sql(con=engine, **insert_kwargs)
+            # insert_df handles pandas NaN/NaT per column and writes real
+            # NULLs; no manual conversion needed (and forcing the frame to
+            # dtype=object here would defeat the numpy dtype checks it uses
+            # internally to decide whether a column needs null-scrubbing).
+            full_table = (
+                f"{table.schema}.{table.table}" if table.schema else table.table
+            )
+            batch_size = max(
+                to_sql_kwargs.get("chunksize") or 0, UPLOAD_INSERT_BATCH_SIZE
+            )
+            raw_conn = engine.raw_connection()
+            try:
+                client = raw_conn.connection.client
+                for start in range(0, len(df), batch_size):
+                    client.insert_df(full_table, df.iloc[start : start + batch_size])
+            finally:
+                raw_conn.close()
 
     @classmethod
     def build_sqlalchemy_uri(
