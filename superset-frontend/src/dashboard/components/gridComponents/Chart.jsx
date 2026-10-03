@@ -25,7 +25,11 @@ import { useHistory } from 'react-router-dom';
 import { bindActionCreators } from 'redux';
 import { useDispatch, useSelector } from 'react-redux';
 
-import { exportChart, mountExploreUrl } from 'src/explore/exploreUtils';
+import {
+  exportChart,
+  exportChartAsyncCSV,
+  mountExploreUrl,
+} from 'src/explore/exploreUtils';
 import ChartContainer from 'src/components/Chart/ChartContainer';
 import {
   LOG_ACTIONS_CHANGE_DASHBOARD_FILTER,
@@ -384,6 +388,24 @@ const Chart = props => {
     exportTable('csv', false);
   }, [exportTable]);
 
+  const exportCSVAsync = useCallback(async () => {
+    try {
+      const { json } = await exportChartAsyncCSV({
+        formData: { ...formData, row_limit: maxRows },
+        force: true,
+        ownState: props.ownState,
+      });
+      boundActionCreators.addSuccessToast(
+        json?.message ||
+          t('CSV export started. Check your email for the link.'),
+      );
+    } catch (error) {
+      boundActionCreators.addDangerToast(
+        error?.message || t('Unable to start the asynchronous CSV export.'),
+      );
+    }
+  }, [boundActionCreators, formData, maxRows, props.ownState]);
+
   const exportFullCSV = useCallback(() => {
     exportTable('csv', true);
   }, [exportTable]);
@@ -451,6 +473,7 @@ const Chart = props => {
         logEvent={boundActionCreators.logEvent}
         onExploreChart={onExploreChart}
         exportCSV={exportCSV}
+        exportCSVAsync={exportCSVAsync}
         exportPivotCSV={exportPivotCSV}
         exportXLSX={exportXLSX}
         exportFullCSV={exportFullCSV}

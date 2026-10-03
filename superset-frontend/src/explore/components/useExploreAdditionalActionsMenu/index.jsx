@@ -32,7 +32,11 @@ import { Menu } from 'src/components/Menu';
 import ModalTrigger from 'src/components/ModalTrigger';
 import Button from 'src/components/Button';
 import { useToasts } from 'src/components/MessageToasts/withToasts';
-import { exportChart, getChartKey } from 'src/explore/exploreUtils';
+import {
+  exportChart,
+  exportChartAsyncCSV,
+  getChartKey,
+} from 'src/explore/exploreUtils';
 import downloadAsImage from 'src/utils/downloadAsImage';
 import { getChartPermalink } from 'src/utils/urlUtils';
 import copyTextToClipboard from 'src/utils/copy';
@@ -54,6 +58,7 @@ const MENU_KEYS = {
   DASHBOARDS_ADDED_TO: 'dashboards_added_to',
   DOWNLOAD_SUBMENU: 'download_submenu',
   EXPORT_TO_CSV: 'export_to_csv',
+  EXPORT_TO_CSV_ASYNC: 'export_to_csv_async',
   EXPORT_TO_CSV_PIVOTED: 'export_to_csv_pivoted',
   EXPORT_TO_JSON: 'export_to_json',
   EXPORT_TO_XLSX: 'export_to_xlsx',
@@ -133,6 +138,7 @@ export const useExploreAdditionalActionsMenu = (
   const chart = useSelector(
     state => state.charts?.[getChartKey(state.explore)],
   );
+  const maxRows = useSelector(state => state.common?.conf?.SQL_MAX_ROW);
 
   const { datasource } = latestQueryFormData;
 
@@ -159,6 +165,33 @@ export const useExploreAdditionalActionsMenu = (
         : null,
     [canDownloadCSV, latestQueryFormData],
   );
+
+  const exportCSVAsync = useCallback(async () => {
+    if (!canDownloadCSV) {
+      return;
+    }
+    try {
+      const { json } = await exportChartAsyncCSV({
+        formData: { ...latestQueryFormData, row_limit: maxRows },
+        ownState,
+      });
+      addSuccessToast(
+        json?.message ||
+          t('CSV export started. Check your email for the link.'),
+      );
+    } catch (error) {
+      addDangerToast(
+        error?.message || t('Unable to start the asynchronous CSV export.'),
+      );
+    }
+  }, [
+    addDangerToast,
+    addSuccessToast,
+    canDownloadCSV,
+    latestQueryFormData,
+    maxRows,
+    ownState,
+  ]);
 
   const exportCSVPivoted = useCallback(
     () =>
@@ -224,6 +257,10 @@ export const useExploreAdditionalActionsMenu = (
               chartName: slice?.slice_name,
             }),
           );
+          break;
+        case MENU_KEYS.EXPORT_TO_CSV_ASYNC:
+          exportCSVAsync();
+          setIsDropdownVisible(false);
           break;
         case MENU_KEYS.EXPORT_TO_CSV_PIVOTED:
           exportCSVPivoted();
@@ -295,6 +332,7 @@ export const useExploreAdditionalActionsMenu = (
     [
       copyLink,
       exportCSV,
+      exportCSVAsync,
       exportCSVPivoted,
       exportJson,
       latestQueryFormData,
@@ -349,9 +387,19 @@ export const useExploreAdditionalActionsMenu = (
               icon={<Icons.FileOutlined css={iconReset} />}
               disabled={!canDownloadCSV}
             >
-              {t('Export to .CSV')}
+              {t('Download chart CSV')}
             </Menu.Item>
           )}
+          {latestQueryFormData.viz_type === VizType.Table &&
+            isFeatureEnabled(FeatureFlag.AsyncCsvExport) && (
+              <Menu.Item
+                key={MENU_KEYS.EXPORT_TO_CSV_ASYNC}
+                icon={<Icons.DownloadOutlined css={iconReset} />}
+                disabled={!canDownloadCSV}
+              >
+                {t('Email full CSV when ready')}
+              </Menu.Item>
+            )}
           <Menu.Item
             key={MENU_KEYS.EXPORT_TO_JSON}
             icon={<Icons.FileOutlined css={iconReset} />}

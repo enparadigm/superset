@@ -161,7 +161,7 @@ test('should call exportChart when exportCSV is clicked', async () => {
   );
   fireEvent.click(getByRole('button', { name: 'More Options' }));
   fireEvent.mouseOver(getByRole('menuitem', { name: 'Download right' }));
-  const exportAction = await findByText('Export to .CSV');
+  const exportAction = await findByText('Download chart CSV');
   fireEvent.click(exportAction);
   expect(stubbedExportCSV).toHaveBeenCalledTimes(1);
   expect(stubbedExportCSV).toHaveBeenCalledWith(
@@ -174,6 +174,35 @@ test('should call exportChart when exportCSV is clicked', async () => {
     }),
   );
   stubbedExportCSV.mockRestore();
+});
+
+test('should enqueue an asynchronous CSV export for table charts', async () => {
+  const previousFeatureFlags = global.featureFlags;
+  global.featureFlags = {
+    [FeatureFlag.AsyncCsvExport]: true,
+  };
+  const stubbedAsyncExport = jest
+    .spyOn(exploreUtils, 'exportChartAsyncCSV')
+    .mockResolvedValue({ json: { message: 'CSV export started' } });
+  const { findByText, getByRole } = setup(
+    {},
+    {
+      dashboardInfo: { ...defaultState.dashboardInfo, superset_can_csv: true },
+    },
+  );
+
+  fireEvent.click(getByRole('button', { name: 'More Options' }));
+  fireEvent.mouseOver(getByRole('menuitem', { name: 'Download right' }));
+  fireEvent.click(await findByText('Email full CSV when ready'));
+
+  expect(stubbedAsyncExport).toHaveBeenCalledWith(
+    expect.objectContaining({
+      formData: expect.objectContaining({ dashboardId: 111, row_limit: 666 }),
+      force: true,
+    }),
+  );
+  stubbedAsyncExport.mockRestore();
+  global.featureFlags = previousFeatureFlags;
 });
 
 test('should call exportChart with row_limit props.maxRows when exportFullCSV is clicked', async () => {
@@ -191,7 +220,7 @@ test('should call exportChart with row_limit props.maxRows when exportFullCSV is
   );
   fireEvent.click(getByRole('button', { name: 'More Options' }));
   fireEvent.mouseOver(getByRole('menuitem', { name: 'Download right' }));
-  const exportAction = await findByText('Export to full .CSV');
+  const exportAction = await findByText('Download full CSV');
   fireEvent.click(exportAction);
   expect(stubbedExportCSV).toHaveBeenCalledTimes(1);
   expect(stubbedExportCSV).toHaveBeenCalledWith(

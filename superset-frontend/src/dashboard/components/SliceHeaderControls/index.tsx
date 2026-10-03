@@ -129,6 +129,7 @@ export interface SliceHeaderControlsProps {
   logEvent?: (eventName: string, eventData?: object) => void;
   toggleExpandSlice?: (sliceId: number) => void;
   exportCSV?: (sliceId: number) => void;
+  exportCSVAsync?: (sliceId: number) => void;
   exportPivotCSV?: (sliceId: number) => void;
   exportFullCSV?: (sliceId: number) => void;
   exportXLSX?: (sliceId: number) => void;
@@ -217,6 +218,9 @@ const SliceHeaderControls = (
       case MenuKeys.ExportCsv:
         // eslint-disable-next-line no-unused-expressions
         props.exportCSV?.(props.slice.slice_id);
+        break;
+      case MenuKeys.ExportCsvAsync:
+        props.exportCSVAsync?.(props.slice.slice_id);
         break;
       case MenuKeys.ExportPivotCsv:
         // eslint-disable-next-line no-unused-expressions
@@ -470,8 +474,16 @@ const SliceHeaderControls = (
             key={MenuKeys.ExportCsv}
             icon={<Icons.FileOutlined css={dropdownIconsStyles} />}
           >
-            {t('Export to .CSV')}
+            {t('Download chart CSV')}
           </Menu.Item>
+          {isTable && isFeatureEnabled(FeatureFlag.AsyncCsvExport) && (
+            <Menu.Item
+              key={MenuKeys.ExportCsvAsync}
+              icon={<Icons.DownloadOutlined css={dropdownIconsStyles} />}
+            >
+              {t('Email full CSV when ready')}
+            </Menu.Item>
+          )}
           {isPivotTable && (
             <Menu.Item
               key={MenuKeys.ExportPivotCsv}
@@ -496,7 +508,7 @@ const SliceHeaderControls = (
                   key={MenuKeys.ExportFullCsv}
                   icon={<Icons.FileOutlined css={dropdownIconsStyles} />}
                 >
-                  {t('Export to full .CSV')}
+                  {t('Download full CSV')}
                 </Menu.Item>
                 {/* Excel export disabled - comment out the following lines to re-enable */}
                 {/* <Menu.Item

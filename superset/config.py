@@ -507,6 +507,10 @@ DEFAULT_FEATURE_FLAGS: dict[str, bool] = {
     # Allow users to export full CSV of table viz type.
     # This could cause the server to run out of memory or compute.
     "ALLOW_FULL_CSV_EXPORT": False,
+    # Submit table chart CSV exports to Celery and deliver them through object
+    # storage. Requires ASYNC_CSV_EXPORT_S3_BUCKET and a Celery worker importing
+    # superset.tasks.async_csv_export.
+    "ASYNC_CSV_EXPORT": False,
     "ALLOW_ADHOC_SUBQUERY": False,
     "USE_ANALOGOUS_COLORS": False,
     # Apply RLS rules to SQL Lab queries. This requires parsing and manipulating the
@@ -1011,6 +1015,7 @@ class CeleryConfig:  # pylint: disable=too-few-public-methods
         "superset.tasks.scheduler",
         "superset.tasks.thumbnails",
         "superset.tasks.cache",
+        "superset.tasks.async_csv_export",
     )
     result_backend = "db+sqlite:///celery_results.sqlite"
     worker_prefetch_multiplier = 1
@@ -1046,6 +1051,15 @@ class CeleryConfig:  # pylint: disable=too-few-public-methods
 
 
 CELERY_CONFIG: type[CeleryConfig] = CeleryConfig
+
+# Asynchronous chart CSV export. Credentials are intentionally not configured
+# here; boto3 resolves them through its standard environment/instance-role chain.
+ASYNC_CSV_EXPORT_S3_BUCKET: str | None = None
+ASYNC_CSV_EXPORT_S3_KEY_PREFIX = "chart-exports/"
+ASYNC_CSV_EXPORT_LINK_TTL_SECONDS = 86400
+ASYNC_CSV_EXPORT_S3_CLIENT_KWARGS: dict[str, Any] = {}
+ASYNC_CSV_EXPORT_SOFT_TIME_LIMIT_SECONDS = 3600
+ASYNC_CSV_EXPORT_HARD_TIME_LIMIT_SECONDS = 3660
 
 # Set celery config to None to disable all the above configuration
 # CELERY_CONFIG = None
